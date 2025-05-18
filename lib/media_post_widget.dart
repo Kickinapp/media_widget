@@ -12,7 +12,7 @@ class MediaPost extends StatefulWidget {
   final double width; // Width of media display
   final double height; // Height of media display
 
-  /// Callback triggered when user wants to navigate, passing true if it's a single video.
+  /// Callback triggered automatically to notify if it's a single video
   final Function(bool isSingleVideo) onNavigate;
 
   const MediaPost({
@@ -29,56 +29,86 @@ class MediaPost extends StatefulWidget {
 
 class _MediaPostState extends State<MediaPost> {
   int _currentIndex = 0; // Current page index for PageView
+  final List<_ShotsState?> _videoControllers = [];
 
-  /// Builds the video player widget using the internal _Shots widget
-  Widget _buildVideoPlayer(String videoUrl) {
-    return _Shots(
-      videoUrl: videoUrl,
-      width: widget.width,
-      height: widget.height,
-    );
+  static final List<String> videoExtensions = ['.mp4', '.mov', '.avi', '.mkv'];
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Initialize list for storing _ShotsState refs for all videos (nullable)
+    for (var _ in widget.mediaUrls) {
+      _videoControllers.add(null);
+    }
+
+    // Notify parent immediately if single video or not
+    final isSingleVideo =
+        widget.mediaUrls.length == 1 && _isVideo(widget.mediaUrls[0]);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onNavigate(isSingleVideo);
+    });
   }
 
-  /// Returns a widget depending on the media type (image or video)
+  bool _isVideo(String url) {
+    final lowerUrl = url.toLowerCase();
+    return videoExtensions.any((ext) => lowerUrl.endsWith(ext));
+  }
+
+  /// Build the media widget for given index, caching _Shots state references for videos
   Widget _buildMediaItem(int index) {
     final mediaUrl = widget.mediaUrls[index];
 
-    // If the media URL ends with '.mp4' treat it as a video
-    if (mediaUrl.toLowerCase().endsWith('.mp4')) {
-      return _buildVideoPlayer(mediaUrl);
+    if (_isVideo(mediaUrl)) {
+      return _Shots(
+        key: ValueKey(mediaUrl),
+        videoUrl: mediaUrl,
+        width: widget.width,
+        height: widget.height,
+        onControllerCreated: (controllerState) {
+          _videoControllers[index] = controllerState;
+          // If this is current index, ensure video is playing
+          if (index == _currentIndex) {
+            controllerState.playVideo();
+          } else {
+            controllerState.pauseVideo();
+          }
+        },
+      );
     } else {
-      // Otherwise, treat it as an image
       return Image.network(mediaUrl, fit: BoxFit.cover);
     }
   }
 
+  void _onPageChanged(int index) {
+    setState(() {
+      // Pause previous video if any
+      if (_currentIndex < _videoControllers.length) {
+        _videoControllers[_currentIndex]?.pauseVideo();
+      }
+      _currentIndex = index;
+      // Play current video if video
+      if (_currentIndex < _videoControllers.length) {
+        _videoControllers[_currentIndex]?.playVideo();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Determine if there is exactly one media and it's a video
-    final isSingleVideo =
-        widget.mediaUrls.length == 1 &&
-        widget.mediaUrls[0].toLowerCase().endsWith('.mp4');
-
     return Column(
       children: [
-        // Media display area with swipe gesture to switch between media
         SizedBox(
           width: widget.width,
           height: widget.height,
           child: PageView.builder(
             itemCount: widget.mediaUrls.length,
-            onPageChanged: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
+            onPageChanged: _onPageChanged,
             itemBuilder: (context, index) {
               return _buildMediaItem(index);
             },
           ),
         ),
-
-        // Dots indicator shown only if more than one media
         if (widget.mediaUrls.length > 1)
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -94,13 +124,6 @@ class _MediaPostState extends State<MediaPost> {
               );
             }),
           ),
-
-        // Button that triggers the navigation callback,
-        // passing true if single video, false otherwise.
-        ElevatedButton(
-          onPressed: () => widget.onNavigate(isSingleVideo),
-          child: Text('Navigate'),
-        ),
       ],
     );
   }
@@ -108,16 +131,21 @@ class _MediaPostState extends State<MediaPost> {
 
 /// Internal widget responsible for video playback with mobile and web support.
 /// Uses VideoPlayerController + Chewie for cross-platform video handling.
+/// Reports its controller state back to parent via onControllerCreated callback.
 class _Shots extends StatefulWidget {
-  final String videoUrl; // URL of the video to play
-  final double width; // Width to display video
-  final double height; // Height to display video
+  final String videoUrl;
+  final double width;
+  final double height;
+
+  /// Callback to report back the internal state for control from parent
+  final void Function(_ShotsState controllerState)? onControllerCreated;
 
   const _Shots({
     Key? key,
     required this.videoUrl,
     required this.width,
     required this.height,
+    this.onControllerCreated,
   }) : super(key: key);
 
   @override
@@ -127,36 +155,35 @@ class _Shots extends StatefulWidget {
 class _ShotsState extends State<_Shots> {
   late VideoPlayerController _videoController;
   ChewieController? _chewieController;
-  bool _isMuted = false; // Track mute state
-  bool _isPaused = false; // Track play/pause state
+  bool _isMuted = false;
+  bool _isPaused = false;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialize video controller with network video URL
     _videoController = VideoPlayerController.networkUrl(
-        Uri.parse('https://example.com/video.mp4'),
+        Uri.parse(widget.videoUrl),
       )
       ..initialize().then((_) {
-        // Set video looping and volume once initialized
         _videoController.setLooping(true);
-        _videoController.setVolume(1); // Start unmuted
+        _videoController.setVolume(1);
         _videoController.play();
 
-        // Initialize Chewie controller for enhanced video controls (cross-platform)
         setState(() {
           _chewieController = ChewieController(
             videoPlayerController: _videoController,
             autoPlay: true,
             looping: true,
-            showControls: false, // Hide default controls for custom UI
+            showControls: false,
           );
         });
+
+        // Inform parent controller created & ready
+        widget.onControllerCreated?.call(this);
       });
   }
 
-  /// Toggle mute/unmute video
   void toggleMute() {
     setState(() {
       _isMuted = !_isMuted;
@@ -164,7 +191,6 @@ class _ShotsState extends State<_Shots> {
     });
   }
 
-  /// Toggle between play and pause
   void togglePlayPause() {
     if (!_videoController.value.isInitialized) return;
 
@@ -174,7 +200,6 @@ class _ShotsState extends State<_Shots> {
     });
   }
 
-  /// Handle long press hold to pause/play video (mobile only)
   void handleHold(bool isHolding) {
     if (!_videoController.value.isInitialized || kIsWeb) return;
 
@@ -184,11 +209,31 @@ class _ShotsState extends State<_Shots> {
     });
   }
 
-  /// Pause video if visibility below 50%, play otherwise
   void handleVisibility(bool isVisible) {
     if (!_videoController.value.isInitialized) return;
 
     isVisible ? _videoController.play() : _videoController.pause();
+  }
+
+  /// Expose play and pause for parent widget control
+  void playVideo() {
+    if (_videoController.value.isInitialized &&
+        _videoController.value.isPlaying == false) {
+      _videoController.play();
+      setState(() {
+        _isPaused = false;
+      });
+    }
+  }
+
+  void pauseVideo() {
+    if (_videoController.value.isInitialized &&
+        _videoController.value.isPlaying) {
+      _videoController.pause();
+      setState(() {
+        _isPaused = true;
+      });
+    }
   }
 
   @override
@@ -200,7 +245,6 @@ class _ShotsState extends State<_Shots> {
 
   @override
   Widget build(BuildContext context) {
-    // Show Chewie player if video initialized, else show loading spinner
     final video =
         _chewieController != null && _videoController.value.isInitialized
             ? Chewie(controller: _chewieController!)
@@ -208,15 +252,12 @@ class _ShotsState extends State<_Shots> {
 
     return VisibilityDetector(
       key: Key(widget.videoUrl),
-      // Pause video when less than 50% visible to user
       onVisibilityChanged: (info) {
         final visiblePercentage = info.visibleFraction * 100;
         handleVisibility(visiblePercentage > 50);
       },
       child: GestureDetector(
-        // Tap to toggle mute/unmute on all platforms
         onTap: toggleMute,
-        // Long press gestures to pause/play on mobile only
         onLongPressStart: (_) => handleHold(true),
         onLongPressEnd: (_) => handleHold(false),
         child: SizedBox(
@@ -225,8 +266,6 @@ class _ShotsState extends State<_Shots> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Use InteractiveViewer on mobile to allow zoom & pan,
-              // show video directly on web without zoom
               kIsWeb
                   ? video
                   : InteractiveViewer(
@@ -235,8 +274,6 @@ class _ShotsState extends State<_Shots> {
                     maxScale: 3,
                     child: video,
                   ),
-
-              // On web only, show mute and play/pause buttons overlay
               if (kIsWeb)
                 Positioned(
                   top: MediaQuery.of(context).size.height / 2 - 24,
