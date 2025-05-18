@@ -1,9 +1,9 @@
 name: kickin_media_widget
 description: "A Flutter widget for displaying media (images/videos) with swiping, video controls, and more."
-version: 1.0.0+2
+version: 1.0.0+3
 
 environment:
-  sdk: ">=3.7.2 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
   flutter:
