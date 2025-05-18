@@ -26,4 +26,4 @@ flutter:
 
 repository: https://github.com/Kickinapp/kickin_media_widget
 
-publish_to: 'https://pub.dev'
+publish_to: none
