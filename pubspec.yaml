@@ -1,18 +1,15 @@
 name: kickin_media_widget
-description: "A new Flutter project."
-publish_to: 'none'
-
+description: "A Flutter widget for displaying media (images/videos) with swiping, video controls, and more."
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.7.2
+  sdk: ">=3.7.2 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-
   video_player: ^2.5.0
   chewie: ^1.4.3
   visibility_detector: ^0.4.0+2
@@ -26,3 +23,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+repository: https://github.com/Kickinapp/kickin_media_widget
+
+publish_to: 'https://pub.dev'

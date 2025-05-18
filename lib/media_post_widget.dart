@@ -55,7 +55,8 @@ class _MediaPostState extends State<MediaPost> {
   @override
   Widget build(BuildContext context) {
     // Determine if there is exactly one media and it's a video
-    final isSingleVideo = widget.mediaUrls.length == 1 &&
+    final isSingleVideo =
+        widget.mediaUrls.length == 1 &&
         widget.mediaUrls[0].toLowerCase().endsWith('.mp4');
 
     return Column(
@@ -134,7 +135,9 @@ class _ShotsState extends State<_Shots> {
     super.initState();
 
     // Initialize video controller with network video URL
-    _videoController = VideoPlayerController.network(widget.videoUrl)
+    _videoController = VideoPlayerController.networkUrl(
+        Uri.parse('https://example.com/video.mp4'),
+      )
       ..initialize().then((_) {
         // Set video looping and volume once initialized
         _videoController.setLooping(true);
@@ -227,11 +230,11 @@ class _ShotsState extends State<_Shots> {
               kIsWeb
                   ? video
                   : InteractiveViewer(
-                      panEnabled: true,
-                      minScale: 1,
-                      maxScale: 3,
-                      child: video,
-                    ),
+                    panEnabled: true,
+                    minScale: 1,
+                    maxScale: 3,
+                    child: video,
+                  ),
 
               // On web only, show mute and play/pause buttons overlay
               if (kIsWeb)
